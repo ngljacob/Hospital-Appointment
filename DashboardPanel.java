@@ -1,323 +1,707 @@
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.RenderingHints;
-import java.awt.geom.Arc2D;
-import java.awt.geom.Ellipse2D;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import javax.imageio.ImageIO;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 public class DashboardPanel extends JPanel {
 
-    private final RecordManager manager;
-    private final KpiCard totalCard = new KpiCard("Total Appointments", UiTheme.CYAN);
-    private final KpiCard activeCard = new KpiCard("Active Cases", UiTheme.GREEN);
-    private final KpiCard revenueCard = new KpiCard("Net Revenue", UiTheme.VIOLET);
-    private final KpiCard checksCard = new KpiCard("Validation Checks", UiTheme.AMBER);
-    private final DonutChart donut = new DonutChart();
-    private final JPanel legend = new JPanel();
-    private final JPanel activityList = new JPanel();
+    private static BufferedImage knowMoreArt;
 
-    public DashboardPanel(RecordManager manager) {
-        this.manager = manager;
-        setLayout(new BorderLayout(18, 18));
-        setBackground(UiTheme.BG);
-        setBorder(BorderFactory.createEmptyBorder(22, 24, 22, 24));
+    private final Consumer<Doctor> onSelect;
+    private final String username;
+    private final JTextField searchField = UiTheme.placeholderField("Search Your Doctor");
+    private final JPanel doctorList = new JPanel();
+    private final List<Doctor> doctors = new ArrayList<>();
+    private final List<SpecialtyCard> specialtyCards = new ArrayList<>();
+    private final Set<String> favorites = new LinkedHashSet<>();
+    private final JLabel filterLabel = UiTheme.caption("All nearby specialists");
+    private final JPanel topPanel;
+    private final JPanel doctorSection;
+    private JLabel sectionTitle;
+    private JLabel seeAllLabel;
+    private Doctor selected;
+    private String activeSpecialty = "All";
+    private boolean focusMode;
 
-        JPanel header = new JPanel(new BorderLayout());
-        header.setOpaque(false);
-        header.add(UiTheme.label("Operations Overview", 24, Font.BOLD, UiTheme.TEXT),
-                BorderLayout.NORTH);
-        header.add(UiTheme.caption("A live snapshot of clinic performance and billing health"),
-                BorderLayout.SOUTH);
-        add(header, BorderLayout.NORTH);
-
-        JPanel body = new JPanel(new BorderLayout(18, 18));
-        body.setOpaque(false);
-
-        JPanel kpis = new JPanel(new java.awt.GridLayout(1, 4, 14, 14));
-        kpis.setOpaque(false);
-        kpis.add(totalCard);
-        kpis.add(activeCard);
-        kpis.add(revenueCard);
-        kpis.add(checksCard);
-        body.add(kpis, BorderLayout.NORTH);
-
-        JPanel insights = new JPanel(new java.awt.GridLayout(1, 2, 14, 14));
-        insights.setOpaque(false);
-        insights.add(buildCategoryCard());
-        insights.add(buildActivityCard());
-        body.add(insights, BorderLayout.CENTER);
-
-        add(body, BorderLayout.CENTER);
-        refresh();
+    public DashboardPanel(Consumer<Doctor> onSelect) {
+        this("Sheikh", onSelect);
     }
 
-    private JPanel buildCategoryCard() {
-        JPanel card = UiTheme.card();
-        card.setLayout(new BorderLayout(12, 12));
-        card.add(UiTheme.label("Service Mix", 16, Font.BOLD, UiTheme.TEXT), BorderLayout.NORTH);
+    public DashboardPanel(String username, Consumer<Doctor> onSelect) {
+        this.onSelect = onSelect;
+        this.username = username == null || username.trim().isEmpty()
+                ? "Sheikh" : username.trim();
+        buildDoctors();
+        selected = doctors.get(1);
 
-        JPanel center = new JPanel(new BorderLayout(10, 10));
-        center.setOpaque(false);
-        center.add(donut, BorderLayout.WEST);
+        setLayout(new BorderLayout(0, 16));
+        setBackground(UiTheme.CREAM);
+        setBorder(BorderFactory.createEmptyBorder(10, 14, 8, 14));
 
-        legend.setLayout(new BoxLayout(legend, BoxLayout.Y_AXIS));
-        legend.setOpaque(false);
-        JScrollPane legendScroll = new JScrollPane(legend);
-        UiTheme.styleScrollPane(legendScroll);
-        center.add(legendScroll, BorderLayout.CENTER);
-        card.add(center, BorderLayout.CENTER);
+        topPanel = buildTop();
+        doctorSection = buildDoctorSection();
+        add(topPanel, BorderLayout.NORTH);
+        add(doctorSection, BorderLayout.CENTER);
+
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                renderDoctors();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                renderDoctors();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                renderDoctors();
+            }
+        });
+    }
+
+    private void buildDoctors() {
+        doctors.add(new Doctor("Chanace Linnsay Berdin", "Cardiologist, Bacolod City",
+                 "Cardiology", "09:00 - 17:00", "Available Now", "CL",
+                 "Cardiologist focused on preventive heart care and minimally invasive procedures.",
+                 1500, 620, 210, 12, 4.8, new Color(169, 195, 158), "graphics/Chanace.jpg"));
+        doctors.add(new Doctor("Angel Mae P. Jacob", "Neurologist, Bacolod City",
+                 "Neurology", "08:30 - 16:30", "Available Now", "AJ",
+                 "Neurologist treating complex conditions with modern diagnostic technology.",
+                 1800, 350, 95, 10, 4.7, new Color(198, 218, 232), "graphics/Angel.jpg", 0.07));
+        doctors.add(new Doctor("Irish Guañizo", "Gastroenterologist, Bacolod City",
+                 "Gastroenterology", "10:00 - 18:00", "Available Now", "IG",
+                 "Digestive health specialist with a calm, patient-first approach to treatment.",
+                  1200, 480, 140, 8, 4.9, new Color(255, 241, 194), "graphics/Irish.jpg"));
+        doctors.add(new Doctor("Kurt Andrie Rillo", "General Practitioner, Bacolod City",
+                  "General Checkup", "08:00 - 17:00", "Available Now", "KR",
+                  "General practitioner providing routine checkups, preventive care, and referrals.",
+                  900, 780, 40, 9, 4.9, new Color(226, 211, 237), "graphics/Kurt.jpg", 0.12));
+        doctors.add(new Doctor("Alyssah Faith Bermejo", "Pediatrician, Bacolod City",
+                  "Pediatrics", "09:00 - 18:00", "Available Now", "AF",
+                  "Pediatrician focused on child wellness, growth monitoring, and family guidance.",
+                  1100, 640, 25, 11, 4.8, new Color(248, 215, 224), "graphics/Alyssah.jpg"));
+    }
+
+    private JPanel buildTop() {
+        JPanel top = new JPanel();
+        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+        top.setOpaque(false);
+
+        SearchBar searchBar = new SearchBar();
+        searchBar.setAlignmentX(LEFT_ALIGNMENT);
+        top.add(searchBar);
+        top.add(Box.createVerticalStrut(8));
+
+        JPanel greeting = new JPanel();
+        greeting.setLayout(new BoxLayout(greeting, BoxLayout.Y_AXIS));
+        greeting.setOpaque(false);
+        greeting.setAlignmentX(LEFT_ALIGNMENT);
+        JLabel hello = UiTheme.heading("Hello " + username + "!!", 26);
+        hello.setAlignmentX(LEFT_ALIGNMENT);
+        JLabel subtitle = UiTheme.caption("Your health, our priority. Find the right doctor today.");
+        subtitle.setAlignmentX(LEFT_ALIGNMENT);
+        greeting.add(hello);
+        greeting.add(Box.createVerticalStrut(4));
+        greeting.add(subtitle);
+        top.add(greeting);
+        top.add(Box.createVerticalStrut(8));
+
+        JPanel features = new JPanel(new GridLayout(1, 2, 18, 18));
+        features.setOpaque(false);
+        features.setAlignmentX(LEFT_ALIGNMENT);
+        features.add(buildPromo());
+        features.add(buildSpecialties());
+        features.setMaximumSize(new Dimension(Integer.MAX_VALUE, features.getPreferredSize().height));
+        top.add(features);
+        return top;
+    }
+
+    private static BufferedImage loadKnowMoreArt() {
+        if (knowMoreArt == null) {
+            try {
+                knowMoreArt = ImageIO.read(new File("graphics/Know More.png"));
+            } catch (IOException ignored) {
+                knowMoreArt = null;
+            }
+        }
+        return knowMoreArt;
+    }
+
+    private JPanel buildPromo() {
+        JPanel promo = UiTheme.gradient(new Color(216, 233, 207), UiTheme.BUTTER_DEEP, 22);
+        promo.setBorder(BorderFactory.createEmptyBorder(14, 20, 14, 20));
+
+        JPanel copy = new JPanel();
+        copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
+        copy.setOpaque(false);
+        JLabel lineOne = UiTheme.heading("Early protection", 21);
+        JLabel lineTwo = UiTheme.heading("for your family", 21);
+        lineOne.setAlignmentX(LEFT_ALIGNMENT);
+        lineTwo.setAlignmentX(LEFT_ALIGNMENT);
+        copy.add(lineOne);
+        copy.add(lineTwo);
+        copy.add(Box.createVerticalStrut(10));
+        JButton knowMore = UiTheme.button("Know More", UiTheme.CHARCOAL, Color.WHITE);
+        knowMore.setAlignmentX(LEFT_ALIGNMENT);
+        knowMore.addActionListener(e -> new AboutDialog(
+                SwingUtilities.getWindowAncestor(this)).setVisible(true));
+        copy.add(knowMore);
+
+        JPanel art = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+                BufferedImage image = loadKnowMoreArt();
+                if (image == null) {
+                    DoctorArt.paintPromoDoctor(g, getWidth(), getHeight());
+                } else {
+                    double scale = Math.min((double) getWidth() / image.getWidth(),
+                            (double) getHeight() / image.getHeight());
+                    int width = (int) Math.ceil(image.getWidth() * scale);
+                    int height = (int) Math.ceil(image.getHeight() * scale);
+                    g.drawImage(image, (getWidth() - width) / 2,
+                            (getHeight() - height) / 2, width, height, null);
+                }
+                g.dispose();
+            }
+        };
+        art.setOpaque(false);
+        art.setPreferredSize(new Dimension(170, 108));
+
+        promo.add(copy, BorderLayout.CENTER);
+        promo.add(art, BorderLayout.EAST);
+        return promo;
+    }
+
+    private JPanel buildSpecialties() {
+        JPanel grid = new JPanel(new GridBagLayout());
+        grid.setOpaque(false);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.insets = new Insets(6, 6, 6, 6);
+        constraints.fill = GridBagConstraints.BOTH;
+        constraints.weightx = 1;
+        constraints.weighty = 1;
+        addSpecialtyCard(grid, createSpecialtyCard("Cardiology", "graphics/Heart.svg"),
+                constraints, 0, 0, 1);
+        addSpecialtyCard(grid, createSpecialtyCard("Neurology", "graphics/Brain.svg"),
+                constraints, 1, 0, 1);
+        addSpecialtyCard(grid, createSpecialtyCard("Gastroenterology",
+                "graphics/Stomach.svg", 28, 0), constraints, 2, 0, 1);
+        addSpecialtyCard(grid, createSpecialtyCard("General Checkup",
+                "graphics/stethoscope.svg"), constraints, 0, 1, 1);
+        addSpecialtyCard(grid, createSpecialtyCard("Pediatrics", "graphics/Pedia.svg"),
+                constraints, 1, 1, 1);
+        addSpecialtyCard(grid, createSpecialtyCard("Bookmark", TcIcons.Kind.STAR),
+                constraints, 2, 1, 1);
+        return grid;
+    }
+
+    private void addSpecialtyCard(JPanel grid, SpecialtyCard card,
+                                  GridBagConstraints constraints,
+                                  int x, int y, int width) {
+        constraints.gridx = x;
+        constraints.gridy = y;
+        constraints.gridwidth = width;
+        grid.add(card, constraints);
+    }
+
+    private SpecialtyCard createSpecialtyCard(String title, TcIcons.Kind kind) {
+        SpecialtyCard card = new SpecialtyCard(title, kind);
+        card.setActive(title.equals(activeSpecialty));
+        specialtyCards.add(card);
         return card;
     }
 
-    private JPanel buildActivityCard() {
-        JPanel card = UiTheme.card();
-        card.setLayout(new BorderLayout(12, 12));
-        card.add(UiTheme.label("Recent Activity", 16, Font.BOLD, UiTheme.TEXT), BorderLayout.NORTH);
-
-        activityList.setLayout(new BoxLayout(activityList, BoxLayout.Y_AXIS));
-        activityList.setOpaque(false);
-        JScrollPane scroll = new JScrollPane(activityList);
-        UiTheme.styleScrollPane(scroll);
-        card.add(scroll, BorderLayout.CENTER);
+    private SpecialtyCard createSpecialtyCard(String title, String svgPath) {
+        SpecialtyCard card = new SpecialtyCard(title, svgPath);
+        card.setActive(title.equals(activeSpecialty));
+        specialtyCards.add(card);
         return card;
     }
 
-    public void refresh() {
-        int total = manager.getTotalRecords();
-        int active = manager.getActiveCount();
-        double revenue = manager.getTotalRevenue();
-        int checks = manager.getValidationChecks();
+    private SpecialtyCard createSpecialtyCard(String title, String svgPath,
+                                              int iconSize, int labelGap) {
+        SpecialtyCard card = new SpecialtyCard(title, svgPath, iconSize, labelGap);
+        card.setActive(title.equals(activeSpecialty));
+        specialtyCards.add(card);
+        return card;
+    }
 
-        totalCard.setValue(String.valueOf(total), "appointments in register", total == 0 ? 0 : 1);
-        activeCard.setValue(String.valueOf(active), "cases in progress", total == 0 ? 0 : active / (double) total);
-        revenueCard.setValue(String.format("₱%,.2f", revenue), "excluding cancelled visits",
-                Math.min(1.0, revenue / 5000.0));
-        checksCard.setValue(String.valueOf(checks), "integrity checks run", Math.min(1.0, checks / 20.0));
+    private void selectSpecialty(String title) {
+        setFocusMode(false);
+        activeSpecialty = title.equals(activeSpecialty) ? "All" : title;
+        for (SpecialtyCard card : specialtyCards) {
+            card.setActive(card.getTitle().equals(activeSpecialty));
+        }
+        renderDoctors();
+        if (!"All".equals(activeSpecialty) && !"Bookmark".equals(activeSpecialty)) {
+            for (Doctor doctor : doctors) {
+                if (activeSpecialty.equals(doctor.getSpecialty())) {
+                    selectDoctor(doctor);
+                    break;
+                }
+            }
+        }
+    }
 
-        Map<String, Integer> counts = manager.getCountByCategory();
-        donut.setData(counts);
-        refreshLegend(counts);
-        refreshActivity();
+    private void toggleFocusMode() {
+        activeSpecialty = "All";
+        for (SpecialtyCard card : specialtyCards) {
+            card.setActive(false);
+        }
+        setFocusMode(!focusMode);
+        renderDoctors();
+    }
+
+    private void setFocusMode(boolean focused) {
+        if (focusMode == focused) {
+            return;
+        }
+        focusMode = focused;
+        topPanel.setVisible(!focused);
+        sectionTitle.setText(focused ? "All Doctors" : "Nearby Doctors");
+        seeAllLabel.setText(focused ? "Back to overview" : "See all");
         revalidate();
         repaint();
     }
 
-    private void refreshLegend(Map<String, Integer> counts) {
-        legend.removeAll();
-        if (counts.isEmpty()) {
-            legend.add(UiTheme.caption("No services recorded yet."));
-        }
-        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
-            JPanel row = new JPanel(new BorderLayout(8, 0));
-            row.setOpaque(false);
-            row.setMaximumSize(new Dimension(240, 28));
+    private JPanel buildDoctorSection() {
+        JPanel section = new JPanel(new BorderLayout(0, 12));
+        section.setOpaque(false);
 
-            JPanel swatch = new JPanel() {
-                @Override
-                protected void paintComponent(Graphics graphics) {
-                    Graphics2D g = (Graphics2D) graphics.create();
-                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                            RenderingHints.VALUE_ANTIALIAS_ON);
-                    g.setColor(colorFor(entry.getKey()));
-                    g.fill(new RoundRectangle2D.Float(0, 0, getWidth() - 1, getHeight() - 1, 6, 6));
-                    g.dispose();
-                }
-            };
-            swatch.setPreferredSize(new Dimension(12, 12));
-            swatch.setOpaque(false);
-
-            JPanel left = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 4));
-            left.setOpaque(false);
-            left.add(swatch);
-            left.add(UiTheme.caption(entry.getKey()));
-            row.add(left, BorderLayout.CENTER);
-            row.add(UiTheme.label(String.valueOf(entry.getValue()), 13, Font.BOLD, UiTheme.TEXT),
-                    BorderLayout.EAST);
-            legend.add(row);
-        }
-        legend.revalidate();
-        legend.repaint();
-    }
-
-    private void refreshActivity() {
-        activityList.removeAll();
-        List<BaseRecord> records = new ArrayList<>(manager.getAllRecords());
-        if (records.isEmpty()) {
-            JPanel empty = new UiTheme.RoundedPanel(UiTheme.SURFACE_2, 12);
-            empty.add(UiTheme.caption("No appointments yet. Add one from the Appointment Console."),
-                    BorderLayout.CENTER);
-            empty.setMaximumSize(new Dimension(400, 60));
-            activityList.add(empty);
-        } else {
-            int start = Math.max(0, records.size() - 5);
-            for (int i = records.size() - 1; i >= start; i--) {
-                BaseRecord record = records.get(i);
-                JPanel row = new UiTheme.RoundedPanel(UiTheme.SURFACE_2, 12);
-                row.setMaximumSize(new Dimension(500, 58));
-                JLabel title = UiTheme.label(record.getName() + "  ·  " + record.getRecordId(),
-                        13, Font.BOLD, UiTheme.TEXT);
-                JLabel detail = UiTheme.caption(record.getSummaryDetails());
-                JPanel stack = new JPanel(new BorderLayout());
-                stack.setOpaque(false);
-                stack.add(title, BorderLayout.NORTH);
-                stack.add(detail, BorderLayout.SOUTH);
-                row.add(stack, BorderLayout.CENTER);
-                activityList.add(row);
-                activityList.add(javax.swing.Box.createVerticalStrut(8));
+        JPanel heading = new JPanel(new BorderLayout());
+        heading.setOpaque(false);
+        sectionTitle = UiTheme.heading("Nearby Doctors", 21);
+        heading.add(sectionTitle, BorderLayout.WEST);
+        seeAllLabel = UiTheme.label("See all", 12, Font.BOLD, UiTheme.DEEP_OLIVE);
+        seeAllLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        seeAllLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                toggleFocusMode();
             }
-        }
-        activityList.revalidate();
-        activityList.repaint();
+        });
+        heading.add(seeAllLabel, BorderLayout.EAST);
+
+        JPanel headingWrap = new JPanel(new BorderLayout(0, 4));
+        headingWrap.setOpaque(false);
+        headingWrap.add(heading, BorderLayout.NORTH);
+        headingWrap.add(filterLabel, BorderLayout.SOUTH);
+        section.add(headingWrap, BorderLayout.NORTH);
+
+        doctorList.setLayout(new BoxLayout(doctorList, BoxLayout.Y_AXIS));
+        doctorList.setOpaque(false);
+        renderDoctors();
+
+        JScrollPane scroll = new JScrollPane(doctorList);
+        UiTheme.styleScrollPane(scroll);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setPreferredSize(new Dimension(0, 300));
+        scroll.setMinimumSize(new Dimension(0, 200));
+        section.add(scroll, BorderLayout.CENTER);
+        return section;
     }
 
-    private Color colorFor(String category) {
-        if ("Consultation".equals(category)) {
-            return UiTheme.CYAN;
+    private void renderDoctors() {
+        doctorList.removeAll();
+        String query = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
+        boolean bookmarks = !focusMode && "Bookmark".equals(activeSpecialty);
+        sectionTitle.setText(focusMode ? "All Doctors"
+                : (bookmarks ? "Bookmarked Doctors" : "Nearby Doctors"));
+        filterLabel.setText(focusMode
+                ? "All specialists in Bacolod City"
+                : (bookmarks ? "Saved specialists"
+                    : (("All".equals(activeSpecialty) || "Bookmark".equals(activeSpecialty))
+                        ? "All nearby specialists"
+                        : activeSpecialty + " specialists nearby")));
+        boolean found = false;
+        for (Doctor doctor : doctors) {
+            if (bookmarks) {
+                if (!favorites.contains(doctor.getName())) {
+                    continue;
+                }
+            } else if (!"All".equals(activeSpecialty)
+                    && !"Bookmark".equals(activeSpecialty)
+                    && !activeSpecialty.equalsIgnoreCase(doctor.getSpecialty())) {
+                continue;
+            }
+            String haystack = (doctor.getName() + " " + doctor.getClinic() + " "
+                    + doctor.getSpecialty()).toLowerCase();
+            if (!query.isEmpty() && !haystack.contains(query)) {
+                continue;
+            }
+            if (found) {
+                doctorList.add(Box.createVerticalStrut(10));
+            }
+            found = true;
+            DoctorCard card = new DoctorCard(doctor, doctor == selected, focusMode);
+            card.setAlignmentX(LEFT_ALIGNMENT);
+            doctorList.add(card);
         }
-        if ("Lab Test".equals(category)) {
-            return UiTheme.VIOLET;
+        if (!found) {
+            JLabel empty = UiTheme.caption(bookmarks
+                    ? "No bookmarked doctors yet. Tap a star on a doctor to save them here."
+                    : "No doctors match this view. Try another specialty or search.");
+            empty.setAlignmentX(LEFT_ALIGNMENT);
+            doctorList.add(empty);
         }
-        return UiTheme.MUTED;
+        doctorList.revalidate();
+        doctorList.repaint();
     }
 
-    private static class KpiCard extends UiTheme.RoundedPanel {
-
-        private final JLabel valueLabel = UiTheme.label("0", 26, Font.BOLD, UiTheme.TEXT);
-        private final JLabel hintLabel = UiTheme.caption("");
-        private final ProgressBar bar;
-
-        KpiCard(String title, Color accent) {
-            super(UiTheme.SURFACE, 16);
-            setLayout(new BorderLayout(0, 8));
-            add(UiTheme.label(title.toUpperCase(), 11, Font.BOLD, accent), BorderLayout.NORTH);
-            add(valueLabel, BorderLayout.CENTER);
-            JPanel bottom = new JPanel(new BorderLayout(0, 8));
-            bottom.setOpaque(false);
-            bottom.add(hintLabel, BorderLayout.NORTH);
-            bar = new ProgressBar(accent);
-            bar.setPreferredSize(new Dimension(0, 6));
-            bottom.add(bar, BorderLayout.SOUTH);
-            add(bottom, BorderLayout.SOUTH);
-        }
-
-        void setValue(String value, String hint, double ratio) {
-            valueLabel.setText(value);
-            hintLabel.setText(hint);
-            bar.setRatio(ratio);
-            bar.repaint();
+    private void selectDoctor(Doctor doctor) {
+        selected = doctor;
+        renderDoctors();
+        if (onSelect != null) {
+            onSelect.accept(doctor);
         }
     }
 
-    private static class ProgressBar extends JPanel {
+    public void refresh() {
+        renderDoctors();
+    }
 
-        private final Color accent;
-        private double ratio;
+    private class SearchBar extends JPanel {
 
-        ProgressBar(Color accent) {
-            this.accent = accent;
+        private final JButton searchButton = new JButton() {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setPaint(new GradientPaint(0, 0, UiTheme.SAGE_LIGHT,
+                        getWidth(), getHeight(), UiTheme.DEEP_OLIVE));
+                g.fill(new RoundRectangle2D.Float(1, 3, getWidth() - 4, getHeight() - 6, 18, 18));
+                TcIcons.paint(g, TcIcons.Kind.SEARCH, 8, 7, 22, Color.WHITE, false);
+                g.dispose();
+            }
+        };
+
+        SearchBar() {
+            setLayout(null);
             setOpaque(false);
-        }
-
-        void setRatio(double ratio) {
-            this.ratio = Math.max(0.0, Math.min(1.0, ratio));
+            setPreferredSize(new Dimension(400, 40));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+            searchField.setPreferredSize(new Dimension(340, 36));
+            add(searchField);
+            searchButton.setFocusPainted(false);
+            searchButton.setBorderPainted(false);
+            searchButton.setContentAreaFilled(false);
+            searchButton.setOpaque(false);
+            searchButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            searchButton.addActionListener(e -> searchField.requestFocusInWindow());
+            add(searchButton);
         }
 
         @Override
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(UiTheme.SURFACE_2);
-            g.fill(new RoundRectangle2D.Float(0, 0, getWidth() - 1, getHeight() - 1, 4, 4));
-            if (ratio > 0) {
-                g.setColor(accent);
-                g.fill(new RoundRectangle2D.Float(0, 0,
-                        Math.max(6, (int) (getWidth() * ratio)), getHeight() - 1, 4, 4));
-            }
-            g.dispose();
+        public void doLayout() {
+            searchField.setBounds(0, 0, Math.max(120, getWidth() - 52), getHeight());
+            searchButton.setBounds(getWidth() - 46, 0, 40, 40);
         }
     }
 
-    private static class DonutChart extends JPanel {
+    private class SpecialtyCard extends UiTheme.RoundedPanel {
 
-        private final List<Map.Entry<String, Integer>> slices = new ArrayList<>();
+        private final String title;
+        private final Component icon;
+        private final Consumer<Color> iconColor;
+        private final JLabel label;
+        private boolean active;
+        private boolean hover;
 
-        DonutChart() {
-            setOpaque(false);
-            setPreferredSize(new Dimension(190, 190));
+        SpecialtyCard(String title, TcIcons.Kind kind) {
+            this(title, kind, null, 20, 2);
         }
 
-        void setData(Map<String, Integer> counts) {
-            slices.clear();
-            slices.addAll(counts.entrySet());
+        SpecialtyCard(String title, String svgPath) {
+            this(title, null, svgPath, 20, 2);
+        }
+
+        SpecialtyCard(String title, String svgPath, int iconSize, int labelGap) {
+            this(title, null, svgPath, iconSize, labelGap);
+        }
+
+        private SpecialtyCard(String title, TcIcons.Kind kind, String svgPath,
+                              int iconSize, int labelGap) {
+            super(UiTheme.SAGE, 18);
+            this.title = title;
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+            setPreferredSize(new Dimension(100, 58));
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+            JPanel host = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+            host.setOpaque(false);
+            host.setAlignmentX(CENTER_ALIGNMENT);
+            host.setMaximumSize(new Dimension(iconSize + 4, iconSize + 4));
+            if (svgPath != null) {
+                SvgIcon svg = new SvgIcon(svgPath, iconSize);
+                svg.setColor(UiTheme.CHARCOAL);
+                JLabel svgLabel = new JLabel(svg);
+                host.add(svgLabel);
+                icon = svgLabel;
+                iconColor = svg::setColor;
+            } else {
+                TcIconLabel tcIcon = new TcIconLabel(kind, iconSize, UiTheme.CHARCOAL);
+                host.add(tcIcon);
+                icon = tcIcon;
+                iconColor = tcIcon::setColor;
+            }
+            add(Box.createVerticalGlue());
+            add(host);
+            add(Box.createVerticalStrut(labelGap));
+
+            label = UiTheme.label(title, 12, Font.BOLD, UiTheme.CHARCOAL);
+            label.setHorizontalAlignment(JLabel.CENTER);
+            label.setAlignmentX(CENTER_ALIGNMENT);
+            label.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+            add(label);
+            add(Box.createVerticalGlue());
+
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    hover = true;
+                    repaint();
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    hover = false;
+                    repaint();
+                }
+
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    selectSpecialty(title);
+                }
+            });
+        }
+
+        String getTitle() {
+            return title;
+        }
+
+        void setActive(boolean active) {
+            this.active = active;
+            iconColor.accept(active ? UiTheme.DEEP_OLIVE : UiTheme.CHARCOAL);
+            icon.repaint();
+            label.setForeground(active ? UiTheme.DEEP_OLIVE : UiTheme.CHARCOAL);
             repaint();
         }
 
         @Override
         protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int size = Math.min(getWidth(), getHeight()) - 16;
-            int x = (getWidth() - size) / 2;
-            int y = (getHeight() - size) / 2;
+            setBackground(active ? UiTheme.BUTTER_DEEP
+                    : (hover ? UiTheme.SAGE_LIGHT : UiTheme.SAGE));
+            super.paintComponent(graphics);
+        }
+    }
 
-            int total = 0;
-            for (Map.Entry<String, Integer> slice : slices) {
-                total += slice.getValue();
-            }
+    private class DoctorCard extends UiTheme.RoundedPanel {
 
-            if (total == 0) {
-                g.setColor(UiTheme.LINE);
-                g.draw(new Ellipse2D.Double(x, y, size, size));
-            } else {
-                double start = -90;
-                for (Map.Entry<String, Integer> slice : slices) {
-                    double angle = 360.0 * slice.getValue() / total;
-                    g.setColor(colorForStatic(slice.getKey()));
-                    g.fill(new Arc2D.Double(x, y, size, size, start, angle, Arc2D.PIE));
-                    start += angle;
+        private final Doctor doctor;
+        private final boolean active;
+        private boolean favorite;
+
+        DoctorCard(Doctor doctor, boolean active, boolean expanded) {
+            super(active ? UiTheme.DEEP_OLIVE : Color.WHITE, 18);
+            this.doctor = doctor;
+            this.active = active;
+            this.favorite = favorites.contains(doctor.getName());
+            int width = expanded ? 800 : 760;
+            int height = expanded ? 124 : 108;
+            int avatarSize = expanded ? 64 : 58;
+            setLayout(new GridBagLayout());
+            setBorder(BorderFactory.createEmptyBorder(expanded ? 16 : 12,
+                    expanded ? 20 : 16, expanded ? 16 : 12, expanded ? 20 : 16));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+            setPreferredSize(new Dimension(width, height));
+
+            Color primary = active ? Color.WHITE : UiTheme.CHARCOAL;
+            Color secondary = active ? UiTheme.SAGE_LIGHT : UiTheme.MUTED_TEXT;
+            GridBagConstraints constraints = new GridBagConstraints();
+            constraints.gridy = 0;
+            constraints.anchor = GridBagConstraints.CENTER;
+            constraints.fill = GridBagConstraints.NONE;
+            constraints.insets = new Insets(0, 6, 0, 6);
+
+            JPanel avatar = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics graphics) {
+                    Graphics2D g = (Graphics2D) graphics.create();
+                    DoctorArt.paintAvatar(g, 0, 0, Math.min(getWidth(), getHeight()), doctor);
+                    g.dispose();
                 }
+            };
+            avatar.setOpaque(false);
+            avatar.setPreferredSize(new Dimension(avatarSize, avatarSize));
+            avatar.setMaximumSize(new Dimension(avatarSize, avatarSize));
+            avatar.setAlignmentY(Component.CENTER_ALIGNMENT);
+            constraints.gridx = 0;
+            constraints.weightx = 0;
+            add(avatar, constraints);
+
+            JPanel schedule = new JPanel();
+            schedule.setLayout(new BoxLayout(schedule, BoxLayout.Y_AXIS));
+            schedule.setOpaque(false);
+            schedule.setAlignmentY(Component.CENTER_ALIGNMENT);
+            schedule.setPreferredSize(new Dimension(210, 60));
+            JPanel hours = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+            hours.setOpaque(false);
+            hours.setAlignmentX(CENTER_ALIGNMENT);
+            TcIconLabel clock = new TcIconLabel(TcIcons.Kind.CLOCK, 14,
+                    active ? UiTheme.SAGE_LIGHT : UiTheme.OLIVE);
+            hours.add(clock);
+            hours.add(UiTheme.label(doctor.getHours(), 11, Font.PLAIN, secondary));
+            hours.add(Box.createHorizontalStrut(6));
+            JLabel status = UiTheme.label(doctor.getStatus(), 11, Font.BOLD,
+                    active ? UiTheme.SAGE_LIGHT : UiTheme.STATUS_GREEN);
+            hours.add(status);
+            schedule.add(hours);
+            JPanel stars = new JPanel(new FlowLayout(FlowLayout.CENTER, 2, 0));
+            stars.setOpaque(false);
+            stars.setAlignmentX(CENTER_ALIGNMENT);
+            for (int i = 0; i < 5; i++) {
+                stars.add(new TcIconLabel(TcIcons.Kind.STAR, 12, UiTheme.GOLD));
             }
+            schedule.add(stars);
+            constraints.gridx = 1;
+            constraints.weightx = 0.9;
+            add(schedule, constraints);
 
-            int hole = (int) (size * 0.58);
-            g.setColor(UiTheme.SURFACE);
-            g.fill(new Ellipse2D.Double(x + (size - hole) / 2.0, y + (size - hole) / 2.0,
-                    hole, hole));
+            JPanel identity = new JPanel();
+            identity.setLayout(new BoxLayout(identity, BoxLayout.Y_AXIS));
+            identity.setOpaque(false);
+            identity.setAlignmentY(Component.CENTER_ALIGNMENT);
+            identity.setPreferredSize(new Dimension(210, 50));
+            JLabel nameLabel = UiTheme.label(doctor.getName(),
+                    expanded ? 17 : 15, Font.BOLD, primary);
+            nameLabel.setHorizontalAlignment(JLabel.CENTER);
+            nameLabel.setAlignmentX(CENTER_ALIGNMENT);
+            identity.add(nameLabel);
+            JLabel specialtyLabel = UiTheme.label(doctor.getClinic(),
+                    expanded ? 12 : 11, Font.PLAIN, secondary);
+            specialtyLabel.setHorizontalAlignment(JLabel.CENTER);
+            specialtyLabel.setAlignmentX(CENTER_ALIGNMENT);
+            identity.add(specialtyLabel);
+            constraints.gridx = 2;
+            constraints.weightx = 1;
+            add(identity, constraints);
 
-            String caption = total == 1 ? "APPOINTMENT" : "APPOINTMENTS";
-            g.setColor(UiTheme.MUTED);
-            g.setFont(UiTheme.font(10, Font.BOLD));
-            drawCentered(g, caption, getHeight() / 2 - 16, getWidth());
-            g.setColor(UiTheme.TEXT);
-            g.setFont(UiTheme.font(28, Font.BOLD));
-            drawCentered(g, String.valueOf(total), getHeight() / 2 + 10, getWidth());
-            g.dispose();
+            JLabel fee = UiTheme.label(String.format("₱ %,d", (int) doctor.getFee()),
+                    expanded ? 19 : 17, Font.BOLD, active ? UiTheme.BUTTER : UiTheme.CHARCOAL);
+            int feeHeight = fee.getPreferredSize().height;
+            fee.setHorizontalAlignment(JLabel.CENTER);
+            fee.setAlignmentY(Component.CENTER_ALIGNMENT);
+            fee.setPreferredSize(new Dimension(120, feeHeight));
+            fee.setMinimumSize(new Dimension(120, feeHeight));
+            fee.setMaximumSize(new Dimension(120, feeHeight));
+            constraints.gridx = 3;
+            constraints.weightx = 0.5;
+            add(fee, constraints);
+
+            JButton bookmark = new JButton() {
+                @Override
+                protected void paintComponent(Graphics graphics) {
+                    Graphics2D g = (Graphics2D) graphics.create();
+                    TcIcons.paint(g, TcIcons.Kind.STAR, 0, 0, getWidth(),
+                            favorite ? UiTheme.GOLD : (active ? UiTheme.BUTTER : UiTheme.OLIVE),
+                            favorite);
+                    g.dispose();
+                }
+            };
+            bookmark.setPreferredSize(new Dimension(22, 22));
+            bookmark.setFocusPainted(false);
+            bookmark.setBorderPainted(false);
+            bookmark.setContentAreaFilled(false);
+            bookmark.setOpaque(false);
+            bookmark.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            bookmark.setToolTipText(favorite ? "Remove bookmark" : "Bookmark this doctor");
+            bookmark.addActionListener(e -> {
+                if (favorites.contains(doctor.getName())) {
+                    favorites.remove(doctor.getName());
+                    favorite = false;
+                } else {
+                    favorites.add(doctor.getName());
+                    favorite = true;
+                }
+                bookmark.setToolTipText(favorite ? "Remove bookmark" : "Bookmark this doctor");
+                bookmark.repaint();
+            });
+            bookmark.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    e.consume();
+                }
+            });
+            JPanel bookmarkHost = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+            bookmarkHost.setOpaque(false);
+            bookmarkHost.setAlignmentY(Component.CENTER_ALIGNMENT);
+            bookmarkHost.add(bookmark);
+            constraints.gridx = 4;
+            constraints.weightx = 0;
+            add(bookmarkHost, constraints);
+
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    selectDoctor(doctor);
+                }
+            });
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         }
 
-        private void drawCentered(Graphics2D g, String text, int baseline, int width) {
-            java.awt.FontMetrics metrics = g.getFontMetrics();
-            g.drawString(text, (width - metrics.stringWidth(text)) / 2, baseline);
-        }
-
-        private Color colorForStatic(String category) {
-            if ("Consultation".equals(category)) {
-                return UiTheme.CYAN;
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            if (active) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(new Color(150, 160, 145));
+                g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND,
+                        BasicStroke.JOIN_ROUND, 0f, new float[]{5f, 5f}, 0f));
+                g.draw(new RoundRectangle2D.Float(-16, 2, getWidth() + 12, getHeight() - 6, 18, 18));
+                g.dispose();
             }
-            if ("Lab Test".equals(category)) {
-                return UiTheme.VIOLET;
-            }
-            return UiTheme.MUTED;
+            super.paintComponent(graphics);
         }
     }
 }

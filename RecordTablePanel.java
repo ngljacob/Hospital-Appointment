@@ -9,6 +9,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableColumn;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -26,7 +27,7 @@ public class RecordTablePanel extends JPanel {
 
     private final DefaultTableModel model;
     private final JTable table;
-    private final JTextField searchField = UiTheme.field();
+    private final JTextField searchField = UiTheme.placeholderField("Search appointments...");
     private final JLabel countLabel = UiTheme.caption("0 appointments");
     private List<BaseRecord> allRecords = new ArrayList<>();
 
@@ -42,7 +43,7 @@ public class RecordTablePanel extends JPanel {
         JPanel tools = new JPanel(new BorderLayout(10, 0));
         tools.setOpaque(false);
         tools.add(countLabel, BorderLayout.WEST);
-        searchField.setPreferredSize(new Dimension(250, 36));
+        searchField.setPreferredSize(new Dimension(250, 40));
         tools.add(searchField, BorderLayout.EAST);
         header.add(tools, BorderLayout.SOUTH);
         add(header, BorderLayout.NORTH);
@@ -54,21 +55,30 @@ public class RecordTablePanel extends JPanel {
             }
         };
         table = new JTable(model);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setRowHeight(34);
         table.setAutoCreateRowSorter(true);
         table.setShowGrid(false);
         table.setIntercellSpacing(new Dimension(0, 0));
         table.setFillsViewportHeight(true);
-        table.setSelectionBackground(new Color(38, 64, 105));
-        table.setSelectionForeground(UiTheme.TEXT);
+        table.setSelectionBackground(UiTheme.SAGE_LIGHT);
+        table.setSelectionForeground(UiTheme.CHARCOAL);
         table.setDefaultRenderer(Object.class, new RecordCellRenderer());
+        int[] widths = {140, 150, 120, 180, 110, 140, 120};
+        for (int i = 0; i < widths.length; i++) {
+            TableColumn column = table.getColumnModel().getColumn(i);
+            column.setMinWidth(widths[i]);
+            column.setPreferredWidth(widths[i]);
+        }
+        table.setPreferredScrollableViewportSize(new Dimension(900, 320));
 
         table.getTableHeader().setDefaultRenderer(new HeaderRenderer());
         table.getTableHeader().setPreferredSize(new Dimension(0, 36));
         table.getTableHeader().setReorderingAllowed(false);
 
         JScrollPane scroll = new JScrollPane(table);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         UiTheme.styleScrollPane(scroll);
         JPanel card = UiTheme.card();
         card.setLayout(new BorderLayout());
@@ -164,28 +174,29 @@ public class RecordTablePanel extends JPanel {
             label.setFont(UiTheme.font(13));
 
             if (selected) {
-                label.setBackground(new Color(38, 64, 105));
-                label.setForeground(UiTheme.TEXT);
+                label.setBackground(UiTheme.SAGE_LIGHT);
+                label.setForeground(UiTheme.CHARCOAL);
             } else {
-                label.setBackground(row % 2 == 0 ? UiTheme.SURFACE : UiTheme.SURFACE_2);
-                label.setForeground(UiTheme.TEXT);
+                label.setBackground(row % 2 == 0 ? UiTheme.WHITE : UiTheme.CREAM);
+                label.setForeground(UiTheme.CHARCOAL);
             }
 
             String text = value == null ? "" : value.toString();
+            label.setToolTipText(column == 0 && !text.isEmpty() ? text : null);
             if (column == 6) {
                 if ("Active".equalsIgnoreCase(text)) {
-                    label.setBackground(selected ? new Color(38, 64, 105) : new Color(20, 61, 52));
-                    label.setForeground(UiTheme.GREEN);
+                    label.setBackground(selected ? UiTheme.SAGE_LIGHT : UiTheme.SAGE);
+                    label.setForeground(UiTheme.DEEP_OLIVE);
                 } else if ("Completed".equalsIgnoreCase(text)) {
-                    label.setBackground(selected ? new Color(38, 64, 105) : new Color(23, 49, 80));
-                    label.setForeground(UiTheme.CYAN);
+                    label.setBackground(selected ? UiTheme.SAGE_LIGHT : new Color(232, 240, 248));
+                    label.setForeground(new Color(70, 105, 140));
                 } else if ("Cancelled".equalsIgnoreCase(text)) {
-                    label.setBackground(selected ? new Color(38, 64, 105) : new Color(70, 32, 48));
-                    label.setForeground(UiTheme.RED);
+                    label.setBackground(selected ? UiTheme.SAGE_LIGHT : new Color(250, 234, 230));
+                    label.setForeground(new Color(168, 82, 65));
                 }
                 label.setFont(UiTheme.font(12, Font.BOLD));
             } else if (column == 2) {
-                label.setForeground("Lab Test".equals(text) ? UiTheme.VIOLET : UiTheme.CYAN);
+                label.setForeground("Lab Test".equals(text) ? UiTheme.DEEP_OLIVE : UiTheme.OLIVE);
                 label.setFont(UiTheme.font(12, Font.BOLD));
             } else if (column == 5) {
                 label.setFont(UiTheme.font(13, Font.BOLD));
@@ -207,8 +218,8 @@ public class RecordTablePanel extends JPanel {
                                                        int row, int column) {
             JLabel label = (JLabel) super.getTableCellRendererComponent(
                     table, value, selected, hasFocus, row, column);
-            label.setBackground(new Color(20, 30, 54));
-            label.setForeground(UiTheme.MUTED);
+            label.setBackground(UiTheme.OLIVE);
+            label.setForeground(Color.WHITE);
             label.setFont(UiTheme.font(11, Font.BOLD));
             label.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
             return label;

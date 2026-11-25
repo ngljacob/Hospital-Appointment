@@ -3,7 +3,7 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import java.awt.BorderLayout;
@@ -19,6 +19,7 @@ public class RecordFormPanel extends JPanel {
     private final RecordManager manager;
     private final RecordTablePanel tablePanel;
     private final Runnable onChange;
+    private final String username;
 
     private final JTextField idField = UiTheme.field();
     private final JTextField nameField = UiTheme.field();
@@ -33,9 +34,17 @@ public class RecordFormPanel extends JPanel {
     private boolean loading;
 
     public RecordFormPanel(RecordManager manager, RecordTablePanel tablePanel, Runnable onChange) {
+        this(manager, tablePanel, onChange, "Sheikh");
+    }
+
+    public RecordFormPanel(RecordManager manager, RecordTablePanel tablePanel,
+                           Runnable onChange, String username) {
         this.manager = manager;
         this.tablePanel = tablePanel;
         this.onChange = onChange;
+        this.username = username == null || username.trim().isEmpty()
+                ? "Sheikh" : username.trim();
+        this.nameField.setText(this.username);
         this.typeCombo = UiTheme.combo(new String[]{"Consultation", "Lab Test"});
         this.statusCombo = UiTheme.combo(new String[]{"Active", "Completed", "Cancelled"});
 
@@ -76,7 +85,7 @@ public class RecordFormPanel extends JPanel {
         JPanel buttons = new JPanel(new GridLayout(2, 2, 8, 8));
         buttons.setOpaque(false);
         JButton addButton = UiTheme.button("Add", UiTheme.CYAN, UiTheme.BG);
-        JButton updateButton = UiTheme.button("Update", UiTheme.VIOLET, UiTheme.TEXT);
+        JButton updateButton = UiTheme.button("Update", UiTheme.VIOLET, Color.WHITE);
         JButton deleteButton = UiTheme.button("Delete", UiTheme.RED, UiTheme.BG);
         JButton clearButton = UiTheme.button("Clear", UiTheme.SURFACE_2, UiTheme.TEXT);
         addButton.addActionListener(e -> addRecord());
@@ -204,22 +213,19 @@ public class RecordFormPanel extends JPanel {
             return;
         }
         String target = selectedId;
-        int answer = JOptionPane.showConfirmDialog(this,
-                "Delete appointment " + target + "?",
-                "Confirm deletion",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
-        if (answer != JOptionPane.YES_OPTION) {
-            return;
-        }
-        try {
-            manager.deleteRecord(target);
-            clearForm();
-            setMessage("Appointment " + target + " deleted.", UiTheme.GREEN);
-            onChange.run();
-        } catch (InvalidRecordException ex) {
-            setMessage(ex.getMessage(), UiTheme.RED);
-        }
+        new ConfirmDialog(SwingUtilities.getWindowAncestor(this),
+                "MORPHO MEDICAL", "Delete appointment?", TcIcons.Kind.CALENDAR,
+                "Delete appointment " + target + "? This cannot be undone.",
+                "Cancel", "Delete", () -> {
+                    try {
+                        manager.deleteRecord(target);
+                        clearForm();
+                        setMessage("Appointment " + target + " deleted.", UiTheme.GREEN);
+                        onChange.run();
+                    } catch (InvalidRecordException ex) {
+                        setMessage(ex.getMessage(), UiTheme.RED);
+                    }
+                }).setVisible(true);
     }
 
     private void clearForm() {
@@ -227,7 +233,7 @@ public class RecordFormPanel extends JPanel {
         selectedId = null;
         idField.setText("");
         idField.setEditable(true);
-        nameField.setText("");
+        nameField.setText(username);
         rateField.setText("");
         extraField.setText("");
         typeCombo.setSelectedItem("Consultation");

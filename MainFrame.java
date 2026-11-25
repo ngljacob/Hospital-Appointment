@@ -1,182 +1,253 @@
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.imageio.ImageIO;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingConstants;
-import javax.swing.Timer;
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.FlowLayout;
-import java.awt.GridLayout;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RadialGradientPaint;
+import java.awt.RenderingHints;
+import java.awt.geom.Point2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+@SuppressWarnings("serial")
 public class MainFrame extends JFrame {
+
+    private static final Color LOGO_DARK = new Color(23, 92, 86);
+    private static final Color LOGO_MID = new Color(50, 118, 94);
+    private static final Color LOGO_LIGHT = new Color(64, 131, 98);
+
+    private static final long serialVersionUID = 1L;
 
     private final RecordManager manager = new RecordManager();
     private final RecordTablePanel tablePanel = new RecordTablePanel();
-    private RecordFormPanel formPanel;
-    private DashboardPanel dashboardPanel;
     private final JPanel dashboardSlot = new JPanel(new BorderLayout());
     private final JPanel views = new JPanel(new CardLayout());
     private final List<Runnable> changeListeners = new ArrayList<>();
+    private final String username;
 
-    private final JLabel statusLabel = UiTheme.caption("");
-    private final JLabel clockLabel = UiTheme.label("", 13, Font.BOLD, UiTheme.TEXT);
-    private JButton overviewButton;
-    private JButton recordsButton;
+    private RecordFormPanel formPanel;
+    private DashboardPanel dashboardPanel;
+    private DoctorProfilePanel profilePanel;
+    private HistoryPanel historyPanel;
+    private NotificationsPanel notificationsPanel;
+    private ProfilePanel accountPanel;
+    private NavButton homeButton;
+    private NavButton appointmentButton;
+    private NavButton historyButton;
+    private NavButton notificationButton;
+    private NavButton profileButton;
 
-    public MainFrame() {
-        super("MediFlow | Clinic Appointment System");
+    public MainFrame(String username) {
+        super("Morpho Medical | Doctor Booking");
+        this.username = username == null || username.trim().isEmpty()
+                ? "Sheikh" : username.trim();
+        setTitle("Morpho Medical | " + this.username);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        getContentPane().setBackground(UiTheme.BG);
-        setLayout(new BorderLayout(0, 0));
-
-        add(buildHeader(), BorderLayout.NORTH);
-
-        JPanel body = new JPanel(new BorderLayout(0, 0));
-        body.setOpaque(false);
-        body.add(buildSidebar(), BorderLayout.WEST);
-        body.add(buildViews(), BorderLayout.CENTER);
-        add(body, BorderLayout.CENTER);
-
-        add(buildFooter(), BorderLayout.SOUTH);
-
-        Timer clock = new Timer(1000, e -> clockLabel.setText(
-                LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
-        clock.start();
-        clockLabel.setText(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
-
-        addChangeListener(dashboardPanel::refresh);
-        setActiveNav(overviewButton);
-        setSize(1280, 760);
-        setMinimumSize(new Dimension(1060, 650));
+        setContentPane(buildShell());
+        setSize(1460, 900);
+        setMinimumSize(new Dimension(1100, 650));
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
         setLocationRelativeTo(null);
-
         fireDataChanged();
     }
 
-    private JPanel buildHeader() {
-        JPanel header = UiTheme.gradient(new Color(12, 20, 42), new Color(22, 45, 72));
-        header.setBorder(BorderFactory.createEmptyBorder(14, 24, 14, 24));
+    private JPanel buildShell() {
+        JPanel shell = new JPanel(new BorderLayout(18, 18)) {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(UiTheme.OUTER);
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.setPaint(new RadialGradientPaint(
+                        new Point2D.Float(getWidth() * 0.16f, getHeight() * 0.78f),
+                        getWidth() * 0.42f,
+                        new float[]{0f, 1f},
+                        new Color[]{new Color(102, 132, 92, 90), new Color(102, 132, 92, 0)}));
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.setPaint(new RadialGradientPaint(
+                        new Point2D.Float(getWidth() * 0.86f, getHeight() * 0.18f),
+                        getWidth() * 0.34f,
+                        new float[]{0f, 1f},
+                        new Color[]{new Color(255, 242, 198, 110), new Color(255, 242, 198, 0)}));
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.dispose();
+                super.paintComponent(graphics);
+            }
+        };
+        shell.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
-        JPanel brand = new JPanel(new BorderLayout());
-        brand.setOpaque(false);
-        brand.add(UiTheme.label("MEDIFLOW", 18, Font.BOLD, UiTheme.TEXT), BorderLayout.NORTH);
-        brand.add(UiTheme.caption("Hospital appointment & billing intelligence"),
-                BorderLayout.SOUTH);
-
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 14, 8));
-        right.setOpaque(false);
-
-        JPanel badge = new UiTheme.RoundedPanel(new Color(19, 61, 58), 12);
-        badge.setLayout(new BorderLayout());
-        badge.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
-        badge.add(UiTheme.label("SYSTEM ONLINE", 11, Font.BOLD, UiTheme.GREEN),
-                BorderLayout.CENTER);
-        right.add(badge);
-        right.add(clockLabel);
-
-        header.add(brand, BorderLayout.WEST);
-        header.add(right, BorderLayout.EAST);
-        return header;
+        JPanel frame = new UiTheme.RoundedPanel(UiTheme.OLIVE, 30);
+        frame.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        frame.setLayout(new BorderLayout(10, 10));
+        frame.add(buildBody(), BorderLayout.CENTER);
+        shell.add(frame, BorderLayout.CENTER);
+        return shell;
     }
 
-    private JPanel buildSidebar() {
-        JPanel sidebar = new JPanel(new BorderLayout());
-        sidebar.setBackground(new Color(12, 18, 34));
-        sidebar.setPreferredSize(new Dimension(210, 0));
-        sidebar.setBorder(BorderFactory.createEmptyBorder(22, 14, 22, 14));
+    private JPanel buildBody() {
+        JPanel body = new JPanel(new BorderLayout(8, 0));
+        body.setOpaque(false);
+        body.add(buildNav(), BorderLayout.WEST);
 
-        JPanel top = new JPanel(new BorderLayout(0, 18));
-        top.setOpaque(false);
-        top.add(UiTheme.label("WORKSPACE", 11, Font.BOLD, UiTheme.MUTED), BorderLayout.NORTH);
+        JPanel center = new UiTheme.RoundedPanel(UiTheme.CREAM, 26);
+        center.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        center.setLayout(new BorderLayout());
 
-        JPanel nav = new JPanel(new GridLayout(2, 1, 0, 8));
-        nav.setOpaque(false);
-        overviewButton = navButton("Overview");
-        recordsButton = navButton("Appointments");
-        overviewButton.addActionListener(e -> showView("overview"));
-        recordsButton.addActionListener(e -> showView("records"));
-        nav.add(overviewButton);
-        nav.add(recordsButton);
-        top.add(nav, BorderLayout.CENTER);
-        sidebar.add(top, BorderLayout.NORTH);
-
-        sidebar.add(UiTheme.caption("Private clinic data · stored locally"), BorderLayout.SOUTH);
-        return sidebar;
-    }
-
-    private JPanel buildViews() {
-        dashboardPanel = new DashboardPanel(manager);
+        dashboardPanel = new DashboardPanel(username, profilePanelRef());
         dashboardSlot.add(dashboardPanel, BorderLayout.CENTER);
-        views.add(dashboardSlot, "overview");
+        views.add(dashboardSlot, "home");
 
-        JPanel recordsView = new JPanel(new BorderLayout(14, 0));
-        recordsView.setBackground(UiTheme.BG);
-        recordsView.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
-        formPanel = new RecordFormPanel(manager, tablePanel, this::fireDataChanged);
-        recordsView.add(formPanel, BorderLayout.WEST);
-        recordsView.add(tablePanel, BorderLayout.CENTER);
-        views.add(recordsView, "records");
+        JPanel records = new JPanel(new BorderLayout(14, 0));
+        records.setOpaque(false);
+        records.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+        formPanel = new RecordFormPanel(manager, tablePanel, this::fireDataChanged, username);
+        records.add(formPanel, BorderLayout.WEST);
+        records.add(tablePanel, BorderLayout.CENTER);
+        views.add(records, "records");
 
-        return views;
+        historyPanel = new HistoryPanel(manager, username);
+        views.add(historyPanel, "history");
+
+        notificationsPanel = new NotificationsPanel(manager, username, this::updateNotificationBadge);
+        views.add(notificationsPanel, "notifications");
+
+        accountPanel = new ProfilePanel(username);
+        views.add(accountPanel, "profile");
+
+        center.add(views, BorderLayout.CENTER);
+        body.add(center, BorderLayout.CENTER);
+
+        profilePanel = new DoctorProfilePanel(username, manager, this::fireDataChanged);
+        body.add(profilePanel, BorderLayout.EAST);
+        addChangeListener(dashboardPanel::refresh);
+        addChangeListener(profilePanel::refresh);
+        addChangeListener(historyPanel::refresh);
+        addChangeListener(notificationsPanel::refresh);
+        return body;
     }
 
-    private JPanel buildFooter() {
-        JPanel footer = new JPanel(new BorderLayout());
-        footer.setBackground(new Color(12, 18, 34));
-        footer.setBorder(BorderFactory.createEmptyBorder(10, 24, 10, 24));
-        footer.add(statusLabel, BorderLayout.WEST);
-        footer.add(UiTheme.caption("MediFlow v1.0"), BorderLayout.EAST);
-        return footer;
+    private java.util.function.Consumer<Doctor> profilePanelRef() {
+        return doctor -> {
+            if (profilePanel != null) {
+                profilePanel.setDoctor(doctor);
+            }
+        };
     }
 
-    private JButton navButton(String text) {
-        JButton button = new JButton(text);
-        button.setFont(UiTheme.font(13, Font.BOLD));
-        button.setForeground(UiTheme.MUTED);
-        button.setBackground(new Color(12, 18, 34));
-        button.setHorizontalAlignment(SwingConstants.LEFT);
-        button.setFocusPainted(false);
-        button.setBorderPainted(false);
-        button.setOpaque(true);
-        button.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 16));
-        button.setPreferredSize(new Dimension(180, 42));
-        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        return button;
-    }
+    private JPanel buildNav() {
+        JPanel nav = new JPanel();
+        nav.setLayout(new BoxLayout(nav, BoxLayout.Y_AXIS));
+        nav.setOpaque(false);
+        nav.setPreferredSize(new Dimension(72, 0));
+        nav.setBorder(BorderFactory.createEmptyBorder(18, 0, 18, 0));
 
-    private void setActiveNav(JButton active) {
-        for (JButton button : new JButton[]{overviewButton, recordsButton}) {
-            boolean selected = button == active;
-            button.setBackground(selected ? new Color(30, 55, 90) : new Color(12, 18, 34));
-            button.setForeground(selected ? UiTheme.CYAN : UiTheme.MUTED);
-        }
+        JComponent brand = UiTheme.brand(true, UiTheme.SCRIPT, Color.WHITE, true);
+        brand.setAlignmentX(Component.CENTER_ALIGNMENT);
+        nav.add(brand);
+        nav.add(Box.createRigidArea(new Dimension(48, 46)));
+
+        homeButton = new NavButton(loadLogo(), true);
+        homeButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        homeButton.setToolTipText("Home");
+        appointmentButton = new NavButton(new SvgIcon("graphics/stethoscope.svg", 28), false);
+        appointmentButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        appointmentButton.setToolTipText("Appointments");
+        historyButton = new NavButton(TcIcons.Kind.HISTORY, false);
+        historyButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        historyButton.setToolTipText("Medical history");
+        notificationButton = new NavButton(TcIcons.Kind.BELL, false);
+        notificationButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        notificationButton.setToolTipText("Notifications");
+
+        homeButton.addActionListener(e -> showView("home"));
+        appointmentButton.addActionListener(e -> showView("records"));
+        historyButton.addActionListener(e -> showView("history"));
+        notificationButton.addActionListener(e -> showView("notifications"));
+
+        nav.add(homeButton);
+        nav.add(Box.createRigidArea(new Dimension(48, 10)));
+        nav.add(appointmentButton);
+        nav.add(Box.createRigidArea(new Dimension(48, 10)));
+        nav.add(historyButton);
+        nav.add(Box.createRigidArea(new Dimension(48, 10)));
+        nav.add(notificationButton);
+        Component spacer = Box.createVerticalGlue();
+        spacer.setMaximumSize(new Dimension(48, Integer.MAX_VALUE));
+        nav.add(spacer);
+
+        profileButton = new NavButton(TcIcons.Kind.USER, false);
+        profileButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        profileButton.setToolTipText("My profile");
+        profileButton.addActionListener(e -> showView("profile"));
+        nav.add(profileButton);
+        nav.add(Box.createRigidArea(new Dimension(48, 8)));
+
+        NavButton help = new NavButton(TcIcons.Kind.HELP, false);
+        help.setAlignmentX(Component.CENTER_ALIGNMENT);
+        help.setToolTipText("Support");
+        help.addActionListener(e -> new SupportDialog(this).setVisible(true));
+        nav.add(help);
+        nav.add(Box.createRigidArea(new Dimension(48, 8)));
+
+        NavButton logout = new NavButton(TcIcons.Kind.LOGOUT, false);
+        logout.setAlignmentX(Component.CENTER_ALIGNMENT);
+        logout.setToolTipText("Log out");
+        logout.addActionListener(e -> logOut());
+        nav.add(logout);
+        return nav;
     }
 
     private void showView(String name) {
         CardLayout layout = (CardLayout) views.getLayout();
         layout.show(views, name);
-        setActiveNav("overview".equals(name) ? overviewButton : recordsButton);
+        homeButton.setActive("home".equals(name));
+        appointmentButton.setActive("records".equals(name));
+        historyButton.setActive("history".equals(name));
+        notificationButton.setActive("notifications".equals(name));
+        profileButton.setActive("profile".equals(name));
+    }
+
+    private void logOut() {
+        new ConfirmDialog(this, "SESSION", "Log out", TcIcons.Kind.LOGOUT,
+                "Log out of Morpho Medical?", "Stay here", "Log out",
+                this::finishLogout).setVisible(true);
+    }
+
+    private void finishLogout() {
+        dispose();
+        new AuthFrame().setVisible(true);
     }
 
     private void fireDataChanged() {
         tablePanel.refresh(manager.getAllRecords());
-        statusLabel.setText(String.format(
-                "%d appointments   |   %d active   |   ₱%,.2f revenue   |   %d checks",
-                manager.getTotalRecords(), manager.getActiveCount(),
-                manager.getTotalRevenue(), manager.getValidationChecks()));
         for (Runnable listener : changeListeners) {
             listener.run();
+        }
+    }
+
+    private void updateNotificationBadge(int count) {
+        if (notificationButton != null) {
+            notificationButton.setBadge(count);
         }
     }
 
@@ -193,5 +264,142 @@ public class MainFrame extends JFrame {
 
     public RecordManager getManager() {
         return manager;
+    }
+
+    private static BufferedImage loadLogo() {
+        try {
+            return ImageIO.read(new File("graphics/Logo.png"));
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static class NavButton extends JButton {
+
+        private static final long serialVersionUID = 1L;
+
+        private final TcIcons.Kind kind;
+        private final SvgIcon svgIcon;
+        private final BufferedImage image;
+        private final BufferedImage inactiveImage;
+        private boolean active;
+        private int badge;
+
+        NavButton(TcIcons.Kind kind, boolean active) {
+            this(kind, null, null, active);
+        }
+
+        NavButton(SvgIcon svgIcon, boolean active) {
+            this(null, svgIcon, null, active);
+        }
+
+        NavButton(BufferedImage image, boolean active) {
+            this(null, null, image, active);
+        }
+
+        private NavButton(TcIcons.Kind kind, SvgIcon svgIcon, BufferedImage image, boolean active) {
+            this.kind = kind;
+            this.svgIcon = svgIcon;
+            this.image = image;
+            this.inactiveImage = whiteTint(image);
+            this.active = active;
+            setPreferredSize(new Dimension(64, 64));
+            setMinimumSize(new Dimension(64, 64));
+            setMaximumSize(new Dimension(64, 64));
+            setFocusPainted(false);
+            setBorderPainted(false);
+            setContentAreaFilled(false);
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setBorder(BorderFactory.createEmptyBorder());
+        }
+
+        private static BufferedImage whiteTint(BufferedImage source) {
+            if (source == null) {
+                return null;
+            }
+            BufferedImage tinted = new BufferedImage(
+                    source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = tinted.createGraphics();
+            g.drawImage(source, 0, 0, null);
+            g.setComposite(AlphaComposite.SrcAtop);
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, tinted.getWidth(), tinted.getHeight());
+            g.dispose();
+            return tinted;
+        }
+
+        void setActive(boolean active) {
+            this.active = active;
+            repaint();
+        }
+
+        void setBadge(int count) {
+            this.badge = Math.max(0, count);
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            if (active) {
+                int diameter = Math.min(getWidth(), getHeight()) - 4;
+                int circleX = (getWidth() - diameter) / 2;
+                int circleY = (getHeight() - diameter) / 2;
+                g.setColor(new Color(255, 255, 255, 30));
+                g.fillOval(circleX, circleY, diameter, diameter);
+                g.setColor(UiTheme.SAGE_LIGHT);
+                g.setStroke(new BasicStroke(2f));
+                g.drawOval(circleX + 1, circleY + 1, diameter - 2, diameter - 2);
+            }
+
+            int iconSize = image != null
+                    ? (active ? 56 : 50)
+                    : (active ? 42 : 32);
+            int iconX = (getWidth() - iconSize) / 2;
+            int iconY = (getHeight() - iconSize) / 2;
+            Color color = Color.WHITE;
+
+            if (image != null) {
+                g.drawImage(active ? image : inactiveImage, iconX, iconY, iconSize, iconSize, this);
+            } else if (svgIcon != null) {
+                double scale = iconSize / (double) svgIcon.getIconWidth();
+                Graphics2D iconGraphics = (Graphics2D) g.create();
+                iconGraphics.translate(iconX, iconY);
+                iconGraphics.scale(scale, scale);
+                if (active) {
+                    svgIcon.setGradient(LOGO_DARK, LOGO_MID, LOGO_LIGHT);
+                } else {
+                    svgIcon.setColor(color);
+                }
+                svgIcon.paintIcon(this, iconGraphics, 0, 0);
+                iconGraphics.dispose();
+            } else if (active) {
+                TcIcons.paintGradient(g, kind, iconX, iconY, iconSize,
+                        LOGO_DARK, LOGO_MID, LOGO_LIGHT, false);
+            } else {
+                TcIcons.paint(g, kind, iconX, iconY, iconSize, color, false);
+            }
+
+            if (badge > 0) {
+                String text = badge > 99 ? "99+" : Integer.toString(badge);
+                int diameter = text.length() > 2 ? 26 : 21;
+                int badgeX = getWidth() - diameter - 1;
+                int badgeY = 1;
+                g.setColor(UiTheme.STATUS_GREEN);
+                g.fillOval(badgeX, badgeY, diameter, diameter);
+                g.setColor(Color.WHITE);
+                g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 10));
+                FontMetrics metrics = g.getFontMetrics();
+                g.drawString(text,
+                        badgeX + (diameter - metrics.stringWidth(text)) / 2f,
+                        badgeY + (diameter - metrics.getHeight()) / 2f + metrics.getAscent());
+            }
+
+            g.dispose();
+            super.paintComponent(graphics);
+        }
     }
 }

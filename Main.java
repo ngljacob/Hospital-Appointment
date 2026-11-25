@@ -14,6 +14,6 @@ public class Main {
         UIManager.put("Table.selectionBackground", new java.awt.Color(38, 64, 105));
         UIManager.put("Table.selectionForeground", UiTheme.TEXT);
 
-        SwingUtilities.invokeLater(() -> new MainFrame().setVisible(true));
+        SwingUtilities.invokeLater(() -> new AuthFrame().setVisible(true));
     }
 }
